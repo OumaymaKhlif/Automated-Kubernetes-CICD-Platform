@@ -1,0 +1,16 @@
+---
+- name: Appliquer le rôle docker
+  import_role:
+    name: docker
+
+- name: Appliquer le rôle nfs-server
+  import_role:
+    name: nfs-server
+
+- name: Appliquer le rôle nexus
+  import_role:
+    name: nexus
+
+- name: Appliquer le rôle gitea
+  import_role:
+    name: gitea

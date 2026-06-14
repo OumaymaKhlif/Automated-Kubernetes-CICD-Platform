@@ -1,0 +1,19 @@
+common_packages:
+  # outil sert à envoyer ou récupérer des données depuis une URL
+  - curl
+  # outil de téléchargement
+  - wget
+  # outil de gestion des versions
+  - git
+  # éditeur de texte
+  - vim
+  # outils réseau
+  - net-tools
+  # certifs SSL pour connexions sécurisées HTTPs
+  # SSL (Secure Sockets Layer) = sécurisation et chiffrement des communications sur Internet.
+  - ca-certificates
+  # gestion des clés GPG(GNU Privacy Guard) = outil de sécurité pour chiffrer et vérifier l’origine des données.
+  - htop
+  - gnupg
+  - apt-transport-https
+  - python3-pip

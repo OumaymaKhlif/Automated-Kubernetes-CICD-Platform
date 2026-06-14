@@ -1,0 +1,227 @@
+---
+
+# ─────────────────────────────────────────
+# 1. Désactiver le swap
+# ─────────────────────────────────────────
+
+- name: Désactiver le swap immédiatement
+  ansible.builtin.command: swapoff -a
+  become: yes
+
+# swap est une mémoire virtuelle sur disque utilisée quand la RAM est saturée
+# Kubernetes exige que le swap soit désactivé, pour garantir que le scheduler alloue correctement la mémoire des pods
+# sinon kubeadm init échoue
+# swapoff -a = désactive tout le swap actif
+
+- name: Désactiver le swap au démarrage (fstab)
+  ansible.builtin.replace:
+    path: /etc/fstab
+    regexp: '^([^#].*\sswap\s.*)$'
+    replace: '# \1'
+  become: yes
+# /etc/fstab = fichier qui définit ce qui est monté au démarrage
+# On commente la ligne swap pour qu'elle ne revienne pas après reboot
+
+# ─────────────────────────────────────────
+# 2. Charger les modules kernel - des extensions du noyau Linux
+# ─────────────────────────────────────────
+- name: Charger les modules kernel nécessaires à Kubernetes
+  ansible.builtin.modprobe:
+    name: "{{ item }}"
+    state: present
+  loop:
+    - overlay
+    - br_netfilter
+  become: yes
+# overlay = nécessaire pour le filesystem des conteneurs Docker
+# br_netfilter = permet au kernel de filtrer le trafic réseau des bridges
+# loop = répète la tâche pour chaque élément de la liste
+
+- name: Persister les modules kernel au démarrage
+  ansible.builtin.copy:
+    dest: /etc/modules-load.d/k8s.conf
+    content: |
+      overlay
+      br_netfilter
+  become: yes
+
+# ─────────────────────────────────────────
+# 3. Paramètres réseau kernel (sysctl)
+# ─────────────────────────────────────────
+- name: Configurer les paramètres sysctl pour Kubernetes
+  ansible.builtin.sysctl:
+    name: "{{ item.name }}"
+    value: "{{ item.value }}"
+    state: present
+    reload: yes
+  loop:
+    - { name: 'net.bridge.bridge-nf-call-iptables', value: '1' }
+    - { name: 'net.bridge.bridge-nf-call-ip6tables', value: '1' }
+    - { name: 'net.ipv4.ip_forward', value: '1' }
+  become: yes
+# bridge-nf-call-iptables = permet à iptables de voir le trafic des bridges
+# ip_forward = permet à la machine de router des paquets entre interfaces
+# Ces 3 paramètres sont OBLIGATOIRES pour Kubernetes
+
+- name: Appliquer sysctl
+  ansible.builtin.command: sysctl --system
+  changed_when: false
+  become: yes
+
+# ─────────────────────────────────────────
+# 4. Installer Containerd
+# ─────────────────────────────────────────
+- name: Installer containerd
+  ansible.builtin.apt:
+    name: containerd
+    state: present
+    update_cache: yes
+  become: yes
+
+# Créer le dossier de configuration de containerd
+- name: Créer le dossier config containerd
+  ansible.builtin.file:
+    path: /etc/containerd
+    state: directory
+  become: yes
+
+# Génèrer la config par défaut de containerd
+# (obligatoire pour que kubelet et containerd se synchronisent)
+- name: Générer la config containerd avec SystemdCgroup
+  ansible.builtin.shell: |
+    containerd config default | sed 's/SystemdCgroup = false/SystemdCgroup = true/' > /etc/containerd/config.toml
+  args:
+        creates: /etc/containerd/config.toml
+  become: yes
+  notify: restart containerd
+# SystemdCgroup = true → obligatoire pour Kubernetes
+# containerd utilise systemd pour gérer les cgroups
+# paramètre de containerd qui indique comment les ressources des conteneurs sont gérées 
+# cgroups : fonctionnalité du noyau Linux qui permet de limiter et contrôler les ressources utilisées
+# Kubernetes et containerd utilisent cgroups pour gérer l’allocation de ressources des pods et des conteneurs
+
+- name: Démarrer et activer containerd
+  ansible.builtin.service:
+    name: containerd
+    enabled: yes
+    state: started
+  become: yes
+
+# ─────────────────────────────────────────
+# 5. Autoriser Nexus en HTTP (insecure registry) 
+# ─────────────────────────────────────────
+
+# containerd refuse par défaut les registries HTTP
+# On déclare explicitement Nexus comme registry non-sécurisé autorisé
+
+- name: Configurer Nexus comme insecure registry dans containerd
+  ansible.builtin.blockinfile:
+    path: /etc/containerd/config.toml
+    marker: "# {mark} NEXUS INSECURE REGISTRY"
+    block: |
+      [plugins."io.containerd.grpc.v1.cri".registry.mirrors."192.168.56.10:8082"]
+        endpoint = ["http://192.168.56.10:8082"]
+      [plugins."io.containerd.grpc.v1.cri".registry.configs."192.168.56.10:8082".tls]
+        insecure_skip_verify = true
+  notify: restart containerd
+
+# ─────────────────────────────────────────
+# 5. Dépôt Kubernetes
+# ─────────────────────────────────────────
+- name: Créer le dossier keyrings
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: '0755'
+  become: yes
+# Créer le dossier pour stocker les clés GPG des dépôts apt.
+
+- name: Ajouter la clé GPG Kubernetes
+  ansible.builtin.shell: |
+    curl -fsSL https://pkgs.k8s.io/core:/stable:/v{{ k8s_version }}/deb/Release.key | \
+    gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+  args:
+    creates: /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+  become: yes
+# k8s_version = 1.28 défini dans group_vars/all.yml
+# curl est un outil en ligne de commande pour télécharger ou envoyer des données via des protocoles réseau (HTTP, HTTPS, FTP…)
+
+
+- name: Ajouter le dépôt Kubernetes
+  ansible.builtin.shell: |
+    echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] \
+    https://pkgs.k8s.io/core:/stable:/v{{ k8s_version }}/deb/ /" | \
+    tee /etc/apt/sources.list.d/kubernetes.list
+  args:
+    creates: /etc/apt/sources.list.d/kubernetes.list
+  become: yes
+
+
+- name: Mettre à jour apt après ajout du dépôt K8s
+  ansible.builtin.apt:
+    update_cache: yes
+  become: yes
+
+# ─────────────────────────────────────────
+# 6. Installer les outils kubernetes: kubelet & kubeadm
+# ─────────────────────────────────────────
+# kubeadm : initialise et gère le cluster
+# kubelet : agent qui tourne sur chaque nœud, exécute les pods
+- name: Installer kubeadm et kubelet
+  ansible.builtin.apt:
+    name:
+      - kubeadm
+      - kubelet
+    state: present
+    update_cache: yes
+  become: yes
+
+# Empêche apt de mettre à jour kubeadm/kubelet automatiquement (les mises à jour k8s doivent être contrôlées manuellement)
+- name: Bloquer les mises à jour automatiques de kubeadm/kubelet
+  ansible.builtin.dpkg_selections:
+    name: "{{ item }}"
+    selection: hold
+  loop:
+    - kubeadm
+    - kubelet
+  become: yes
+
+- name: Activer kubelet
+  ansible.builtin.service:
+    name: kubelet
+    enabled: yes
+    state: started
+  become: yes
+
+
+# ─Configurer crictl pour utiliser containerd 
+# Par défaut crictl cherche dockershim qui n'existe plus
+# On lui indique explicitement le socket containerd
+- name: Configurer crictl endpoint
+  copy:
+    dest: /etc/crictl.yaml
+    content: |
+      runtime-endpoint: unix:///run/containerd/containerd.sock
+      image-endpoint: unix:///run/containerd/containerd.sock
+      timeout: 10
+      debug: false
+
+- name: Create containerd certs.d directory for Nexus
+  file:
+    path: /etc/containerd/certs.d/192.168.56.10:8082
+    state: directory
+
+- name: Configure Nexus insecure registry for containerd
+  copy:
+    dest: /etc/containerd/certs.d/192.168.56.10:8082/hosts.toml
+    content: |
+      server = "http://192.168.56.10:8082"
+
+      [host."http://192.168.56.10:8082"]
+        capabilities = ["pull", "resolve"]
+        skip_verify = true
+
+- name: Restart containerd
+  systemd:
+    name: containerd
+    state: restarted

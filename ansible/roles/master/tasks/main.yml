@@ -1,0 +1,92 @@
+---
+# ─────────────────────────────────────────
+# 1. Installer Kubectl
+# ─────────────────────────────────────────
+# kubectl = outil CLI pour interagir avec le cluster
+# On l'installe que sur le master pour économiser les ressources
+- name: Installer kubectl
+  ansible.builtin.apt:
+    name: kubectl
+    state: present
+  become: yes
+
+- name: Bloquer les mises à jour de kubectl
+  ansible.builtin.dpkg_selections:
+    name: kubectl
+    selection: hold
+  become: yes
+
+# ─────────────────────────────────────────
+# 2. Initialiser le cluster
+# ─────────────────────────────────────────
+# kubeadm init crée :les certificats TLS, la base de données etcd, les composants du control-plane (apiserver, scheduler, controller)et génère le token pour que les workers rejoignent
+- name: Vérifier si le cluster est déjà initialisé
+  ansible.builtin.stat:
+    path: /etc/kubernetes/admin.conf	# fichier créé après kubeadm init
+  register: kubeadm_init_done		# variable pour stocker le résultat de la vérification
+# admin.conf est un fichier de configuration contient credentials admin du cluster, accès API server et certificat TLS pour accéder au cluster avec kubectl
+  become: yes
+
+- name: Initialiser le cluster Kubernetes
+  ansible.builtin.command: >
+    kubeadm init
+    --apiserver-advertise-address={{ control_plane_ip }}
+    --pod-network-cidr={{ pod_network_cidr }}
+    --node-name=control-plane
+  when: not kubeadm_init_done.stat.exists
+  become: yes
+
+# ─────────────────────────────────────────
+# 3. Configurer kubectl pour l'utilisateur vagrant
+# ─────────────────────────────────────────
+# Sans cette config, kubectl ne sait pas à quel cluster se connecter
+- name: Créer le dossier .kube pour vagrant
+  ansible.builtin.file:
+    path: /home/vagrant/.kube
+    state: directory
+    owner: vagrant
+    group: vagrant
+    mode: '0755'
+  become: yes
+# /home/vagrant/.kube/config connecte kubectl au cluster Kubernetes 
+
+- name: Copier admin.conf pour vagrant
+  ansible.builtin.copy:
+    src: /etc/kubernetes/admin.conf
+    dest: /home/vagrant/.kube/config
+    remote_src: yes
+    owner: vagrant
+    group: vagrant
+    mode: '0644'
+  become: yes
+# kubectl lit admin.conf, trouve l'@ du master (API Server), l'envoie une requete (kubctl get nodes) et recoit la réponse 
+# Permet à vagrant d'utiliser kubectl sans sudo
+
+# ─────────────────────────────────────
+# 4. Installation du réseau Kubernetes (Calico)
+# ─────────────────────────────────────
+- name: Appliquer Calico (CNI réseau Kubernetes)
+  import_role:
+    name: calico
+
+# ─────────────────────────────────────────
+# 5.  GÉNÉRER ET SAUVEGARDER LA COMMANDE JOIN
+# ─────────────────────────────────────────
+
+# Ce token sera utilisé par les workers pour rejoindre le cluster
+- name: Générer la commande kubeadm join
+  ansible.builtin.command: kubeadm token create --print-join-command
+  register: join_command
+  changed_when: false
+  become: yes
+# kubeadm token create crée un token d’accès temporaire utilisé pour autoriser un worker à entrer dans le cluster
+# --print-join-command affiche directement la commande complète du join
+
+# Sauvegarde la commande join dans un fichier sur vm-service 
+- name: Sauvegarder la commande join
+  ansible.builtin.copy:
+    content: "{{ join_command.stdout }}"
+    dest: /tmp/kubeadm_join_command 	# Fichier se trouve sur vm-service (la machine où tourne Ansible).  
+    mode: '0644'
+  become: yes
+

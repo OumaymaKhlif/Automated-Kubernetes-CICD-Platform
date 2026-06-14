@@ -1,0 +1,66 @@
+---
+
+# ─────────────────────────────────────────
+# 1. INSTALLATION DOCKER
+# ─────────────────────────────────────────
+
+- name: Supprimer les anciennes versions de Docker
+  ansible.builtin.apt:
+    name:
+      - docker
+      - docker-engine
+      - docker.io
+      - containerd
+      - runc
+    state: absent
+  become: yes
+# On s'assure qu'aucune ancienne version ne cause de conflit
+
+- name: Ajouter la clé GPG Docker
+# clé GPG (GNU Privacy Guard) est une clé cryptographique utilisée pour vérifier l’authenticité et l’intégrité des paquets 
+
+  ansible.builtin.shell: |
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | \
+    gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+  # Convertir la clé ASCII en format binaire et la stocke
+  args:
+    creates: /etc/apt/keyrings/docker.gpg
+  # creates = n'exécute pas si le fichier existe déjà
+  become: yes
+
+- name: Ajouter le dépôt Docker
+  ansible.builtin.apt_repository:
+    repo: "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
+    state: present
+
+- name: Installer Docker
+  ansible.builtin.apt:
+    name: "{{ docker_packages }}"
+    update_cache: yes
+    state: present
+
+- name: Ajouter vagrant au groupe docker
+# Donner les droits Docker à l'utilisateur vagrant afin d’utiliser Docker sans sudo 
+  ansible.builtin.user:
+    name: vagrant
+    groups: docker
+    append: yes
+  become: yes
+
+- name: Démarrer et activer Docker
+  ansible.builtin.service:
+    name: docker
+    enabled: yes
+    # Démarrer automatiquement le service au boot 
+    state: started
+  become: yes
+
+- name: Autoriser le registre Docker Nexus non sécurisé   # permet à Docker de communiquer avec Nexus en HTTP
+  ansible.builtin.copy:
+    dest: /etc/docker/daemon.json                     # fichier de configuration Docker
+    mode: "0644"                                      # permissions du fichier
+    content: |
+      {
+        "insecure-registries": ["192.168.56.10:8082"] 
+      }
+  notify: restart docker                              # redémarre Docker si la configuration change

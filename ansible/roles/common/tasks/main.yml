@@ -1,0 +1,71 @@
+---
+
+# ansible.builtin est le namespace officiel des modules intégrés à Ansible.
+
+# ─────────────────────────────────────────
+# 1. Mise à jour du système
+# ─────────────────────────────────────────
+- name: Mettre à jour tous les paquets
+  ansible.builtin.apt:
+    update_cache: yes       # Met à jour la liste des paquets disponibles
+    upgrade: yes
+    cache_valid_time: 3600  # Ne refait pas la mise à jour si moins de 3600s
+  become: yes             # become: yes = exécute la tâche en mode root (sudo)
+
+# ─────────────────────────────────────────
+# 2. Installer les paquets de base
+# ─────────────────────────────────────────
+- name: Installation des paquets communs
+  ansible.builtin.apt:
+    name: "{{ common_packages }}"         # Liste définie dans vars.yml
+    state: present                        # state: present = installer si pas déjà présent
+  become: yes
+
+# ── 3. Configurer /etc/hosts ──────────────────────────────
+- name: Ajouter les entrées /etc/hosts    # Ajouter résolution locale DNS
+  ansible.builtin.blockinfile:
+    path: /etc/hosts                     # Fichier hosts
+    block: |                             # Bloc ajouté
+      192.168.56.10 vm-service
+      192.168.56.11 control-plane
+      192.168.56.12 worker-1
+      192.168.56.13 worker-2
+    marker: "# {mark} ANSIBLE MANAGED HOSTS"  # Marque pour gestion Ansible
+  become: yes
+
+- name: Autoriser FORWARD pods vers réseau VM
+  iptables:
+    chain: FORWARD
+    source: "10.0.0.0/8"
+    destination: "192.168.56.0/24"
+    jump: ACCEPT
+
+- name: Autoriser FORWARD réseau VM vers pods
+  iptables:
+    chain: FORWARD
+    source: "192.168.56.0/24"
+    destination: "10.0.0.0/8"
+    jump: ACCEPT
+
+- name: Autoriser NAT pods vers réseau VM
+  iptables:
+    table: nat
+    chain: POSTROUTING
+    source: "10.0.0.0/8"
+    destination: "192.168.56.0/24"
+    jump: MASQUERADE
+
+- name: Persister les règles iptables
+  apt:
+    name: iptables-persistent
+    state: present
+
+- name: Sauvegarder les règles
+  command: netfilter-persistent save
+
+- name: Allow SSH forward in iptables
+  ansible.builtin.iptables:
+    chain: FORWARD
+    protocol: tcp
+    destination_port: "22"
+    jump: ACCEPT

@@ -1,0 +1,6 @@
+---
+- name: export nfs
+  ansible.builtin.command: exportfs -ra
+  become: yes
+
+

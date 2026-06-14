@@ -1,0 +1,3 @@
+docker_packages:
+  - docker-ce           # Docker engine complet
+  - containerd.io       # Runtime principal utilisé par Kubernetes pour exécuter les conteneurs 

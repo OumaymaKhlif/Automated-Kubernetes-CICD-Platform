@@ -1,0 +1,51 @@
+pipeline {
+
+    agent any
+
+    stages {
+
+        stage('Build Backend') {
+            steps {
+                sh '''
+                ssh -o StrictHostKeyChecking=no vagrant@192.168.56.10 "
+                cd /home/vagrant/projet/backend &&
+                docker build -t 192.168.56.10:8082/backend:latest .
+                docker push 192.168.56.10:8082/backend:latest
+                "
+                '''
+            }
+        }
+
+        stage('Build Frontend') {
+            steps {
+                sh '''
+                ssh -o StrictHostKeyChecking=no vagrant@192.168.56.10 "
+                cd /home/vagrant/projet/frontend &&
+                docker build -t 192.168.56.10:8082/frontend:latest .
+                docker push 192.168.56.10:8082/frontend:latest
+                "
+                '''
+            }
+        }
+            
+// Pour cela je dois copier kubectl vers pod jenkins
+// kubectl cp /usr/bin/kubectl jenkins/jenkins-0:/tmp/kubectl -c jenkins
+// puis copier le kubeconfig
+// kubectl exec -n jenkins jenkins-0 -c jenkins -- chmod +x /tmp/kubectl
+// kubectl exec -n jenkins jenkins-0 -c jenkins -- mkdir -p /var/jenkins_home/.kube
+// kubectl cp ~/.kube/config jenkins/jenkins-0:/var/jenkins_home/.kube/config -c jenkins
+
+// applique les fichiers Kubernetes: deployments, ...
+
+
+        stage('Deploy Kubernetes') {
+            steps {
+                
+                sh '/tmp/kubectl apply -f /var/jenkins_home/jobs/project-pipeline/workspace/k8s/'
+                sh '/tmp/kubectl rollout restart deployment backend'
+                sh '/tmp/kubectl rollout restart deployment frontend'
+                sh '/tmp/kubectl rollout restart statefulset mongodb'
+            }
+        }
+    }
+}

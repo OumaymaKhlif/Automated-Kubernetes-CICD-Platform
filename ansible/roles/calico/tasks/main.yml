@@ -1,0 +1,44 @@
+---
+
+
+# ─────────────────────────────────────────
+# 0. Attendre que l'API Server soit prêt
+# ─────────────────────────────────────────
+# kubeadm init démarre l'API Server mais il faut quelques secondes
+# avant qu'il accepte les connexions sur le port 6443
+- name: Attendre que l'API Server soit prêt
+  command: kubectl cluster-info
+  environment:
+    KUBECONFIG: /home/vagrant/.kube/config
+  become_user: vagrant
+  register: result
+  until: result.rc == 0
+  retries: 20
+  delay: 10
+# ─────────────────────────────────────────
+# 1. INSTALLER Calico (CNI)
+# ─────────────────────────────────────────
+# Calico se déploie via un fichier YAML officiel contenant :
+# - DaemonSet calico-node (tourne sur chaque nœud, gère le réseau)
+# - Deployment calico-kube-controllers (surveille les ressources k8s)
+
+# Calico = plugin réseau pour la communication entre pods
+# CNI = Container Network Interface
+# pod_network_cidr 192.168.0.0/16 correspond exactement à Calico
+- name: Télécharger le manifest Calico
+  ansible.builtin.get_url:
+    url: "https://raw.githubusercontent.com/projectcalico/calico/{{ calico_version }}/manifests/calico.yaml"
+    dest: /tmp/calico.yaml
+    mode: '0644'
+
+# ─────────────────────────────────────────
+# 2. Appliquer le manifest calico
+# ─────────────────────────────────────────
+# kubectl apply = crée ou met à jour les ressources définies dans le YAML
+# calico.yaml contient les ressources Kubernetes à créer pour installer Calico
+- name: Appliquer Calico
+  ansible.builtin.command: kubectl apply -f /tmp/calico.yaml
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  become: yes
+# Fichier pour accéder au cluster généré par kubeadm init

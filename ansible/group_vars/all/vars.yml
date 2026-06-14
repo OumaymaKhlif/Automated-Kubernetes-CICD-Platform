@@ -1,0 +1,51 @@
+# ============================================================
+# IPs des VM
+# ============================================================
+vm_service_ip: "192.168.56.10"
+control_plane_ip: "192.168.56.11"
+worker1_ip: "192.168.56.12"
+worker2_ip: "192.168.56.13"
+
+# ============================================================
+# Versions
+# ============================================================
+kubernetes_version: "1.28"
+kubernetes_apt_version: "1.28.0-1.1"
+
+# ============================================================
+# Réseau Kubernetes
+# ============================================================
+# Réseau des pods
+pod_network_cidr: "192.168.0.0/16"
+# Réseau des services
+service_cidr: "10.96.0.0/12"
+# CIDR (Classless Inter-Domain Routing) = une notation qui définit un bloc d’adresses IP réseau
+
+# ============================================================
+# NFS (Stockage partagé)
+# ============================================================
+nfs_server_ip: "192.168.56.10"
+# Dossier sur le serveur NFS qui est accessible par les machines du cluster pour stocker et partager des données.
+nfs_export_path: "/srv/nfs/k8s"
+
+# ============================================================
+# Registry Nexus (registry Docker privé)
+# ============================================================
+nexus_ip: "192.168.56.10"
+# Port HTTP de l’interface Nexus
+nexus_port: "8081"
+# Port du registry Docker privé sur Nexus
+nexus_registry_port: "8082"
+nexus_registry: "192.168.56.10:8082"
+
+# ============================================================
+# Jenkins
+# ============================================================
+jenkins_namespace: "jenkins"
+jenkins_node_port: "30080"
+
+# ============================================================
+# Application
+# ============================================================
+app_namespace: "app"
+app_db_name: "appdb"

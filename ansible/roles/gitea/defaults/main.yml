@@ -1,0 +1,6 @@
+gitea_port: "3000"                  # port de l’interface web Gitea
+gitea_data_dir: "/srv/gitea-data"   # dossier où Gitea stocke ses données
+gitea_ssh_port: "2222"              # port SSH pour git clone/push
+gitea_db_type: "sqlite3"            # type de base de données (sqlite3 pour simplicité)
+gitea_root_url: "http://192.168.56.10:3000" # URL d’accès à Gitea (ajuster l’IP si besoin)
+

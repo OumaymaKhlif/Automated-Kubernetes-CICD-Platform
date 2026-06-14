@@ -1,0 +1,6 @@
+# Port interface web Nexus 
+nexus_port: "8081"
+# Port registry Docker privé (utilisé par Kubernetes / Docker)  
+nexus_registry_port: "8082"
+# Dossier où Nexus stocke ses données 
+nexus_data_dir: "/srv/nexus-data"

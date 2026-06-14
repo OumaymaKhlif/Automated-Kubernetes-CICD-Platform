@@ -1,0 +1,209 @@
+# ─────────────────────────────────────────
+# 1. Ajouter repo Helm Jenkins
+# ─────────────────────────────────────────
+- name: Ajouter repo Helm Jenkins
+  ansible.builtin.command: helm repo add jenkins https://charts.jenkins.io
+  environment:
+    KUBECONFIG: /home/vagrant/.kube/config
+  become: yes
+  become_user: vagrant
+
+
+# ─────────────────────────────────────────
+# 2. Mettre à jour repo Helm
+# ─────────────────────────────────────────
+- name: Mettre à jour repo Helm
+  ansible.builtin.command: helm repo update
+  environment:
+    KUBECONFIG: /home/vagrant/.kube/config
+  become: yes
+  become_user: vagrant
+
+
+# ─────────────────────────────────────────
+# 3. Créer namespace Jenkins
+# ─────────────────────────────────────────
+- name: Créer namespace Jenkins
+  ansible.builtin.command: kubectl create namespace jenkins --dry-run=client -o yaml
+  register: ns_yaml
+  changed_when: false
+  environment:
+    KUBECONFIG: /home/vagrant/.kube/config
+
+- name: Appliquer Jenkins namespace
+  ansible.builtin.command: kubectl apply -f -
+  args:
+    stdin: "{{ ns_yaml.stdout }}"
+  environment:
+    KUBECONFIG: /home/vagrant/.kube/config
+# Namespace jenkins = espace de noms Kubernetes pour isoler les ressources Jenkins
+# kubectl get all -n jenkins = vérifier les ressources dans le namespace jenkins
+
+# Kubernetes génère le YAML du namespace (sans le créer) puis apply le crée proprement s'il n'existe pas déjà, cela évite les erreurs 
+
+- name: Autoriser trafic sortant Jenkins
+  command: kubectl apply -f -
+  args:
+    stdin: |
+      apiVersion: networking.k8s.io/v1
+      kind: NetworkPolicy
+      metadata:
+        name: allow-egress-external
+        namespace: jenkins
+      spec:
+        podSelector: {}
+        policyTypes:
+        - Egress
+        egress:
+        - to:
+          - ipBlock:
+              cidr: 0.0.0.0/0
+  become_user: vagrant
+  environment:
+    KUBECONFIG: /home/vagrant/.kube/config
+
+# ─────────────────────────────────────────
+# Générer clé SSH Jenkins
+# ─────────────────────────────────────────
+
+- name: Créer dossier SSH
+  file:
+    path: /home/vagrant/jenkins-ssh
+    state: directory
+    owner: vagrant
+    group: vagrant
+    mode: '0700'
+
+- name: Générer clé SSH
+  openssh_keypair:
+    path: /home/vagrant/jenkins-ssh/id_rsa
+    type: rsa
+    size: 4096
+
+- name: Lire clé publique
+  slurp:
+    src: /home/vagrant/jenkins-ssh/id_rsa.pub
+  register: ssh_pub
+
+- name: Autoriser clé SSH
+  authorized_key:
+    user: vagrant
+    key: "{{ ssh_pub.content | b64decode }}"
+
+# ─────────────────────────────────────────
+# Secret SSH Kubernetes
+# ─────────────────────────────────────────
+
+- name: Créer secret SSH Jenkins
+  shell: |
+    kubectl create secret generic jenkins-ssh \
+    --from-file=id_rsa=/home/vagrant/jenkins-ssh/id_rsa \
+    -n jenkins \
+    --dry-run=client -o yaml | kubectl apply -f -
+  environment:
+    KUBECONFIG: /home/vagrant/.kube/config
+
+# ─────────────────────────────────────────
+# 4. Installer Jenkins via Helm
+# ─────────────────────────────────────────
+- name: Installer Jenkins avec Helm
+  ansible.builtin.command: >
+    helm upgrade --install jenkins jenkins/jenkins
+    --namespace jenkins
+    --set controller.serviceType=NodePort
+    --set controller.nodePort=30080
+    --set controller.admin.username=admin
+    --set controller.admin.password=admin123
+    --set controller.installPlugins[0]=kubernetes
+    --set controller.installPlugins[1]=workflow-aggregator
+    --set controller.installPlugins[2]=git
+    --set controller.installPlugins[3]=gitea
+    --set persistence.enabled=true
+    --set persistence.storageClass=nfs-client
+    --set persistence.size=5Gi
+  become: yes
+  become_user: vagrant
+  environment:
+    KUBECONFIG: /home/vagrant/.kube/config
+  
+
+# serviceType=NodePort expose Jenkins via IP du node
+# nodePort=30080 : port externe accessible
+# persistence.size=5Gi : PVC (PersistentVolumeClaim)
+
+
+# ─────────────────────────────────────────
+# 5. Vérifier déploiement
+# ─────────────────────────────────────────
+- name: Vérifier pods Jenkins
+  ansible.builtin.command: kubectl get pods -n jenkins
+  become: yes
+  become_user: vagrant
+
+# ─────────────────────────────────────────
+# Créer pipeline Jenkins automatiquement
+# ─────────────────────────────────────────
+
+- name: Copier job pipeline XML
+  copy:
+    src: project-pipeline.xml
+    dest: /tmp/project-pipeline.xml
+
+
+- name: Attendre Jenkins prêt
+  ansible.builtin.command: >
+    kubectl rollout status statefulset/jenkins -n jenkins --timeout=300s
+  environment:
+    KUBECONFIG: /home/vagrant/.kube/config
+  changed_when: false
+
+- name: Créer job Jenkins automatiquement
+  shell: |
+    kubectl exec -n jenkins jenkins-0 -- bash -c '
+    mkdir -p /var/jenkins_home/jobs/project-pipeline &&
+    cat > /var/jenkins_home/jobs/project-pipeline/config.xml
+    ' < /tmp/project-pipeline.xml
+  environment:
+    KUBECONFIG: /home/vagrant/.kube/config
+
+- name: Copy Jenkins config.xml
+  shell: |
+    kubectl cp /tmp/project-pipeline.xml \
+    jenkins/jenkins-0:/var/jenkins_home/jobs/project-pipeline/config.xml \
+    -c jenkins
+  environment:
+    KUBECONFIG: /home/vagrant/.kube/config
+
+- name: Attendre Jenkins prêt
+  ansible.builtin.command: >
+    kubectl rollout status statefulset/jenkins -n jenkins --timeout=300s
+  environment:
+    KUBECONFIG: /home/vagrant/.kube/config
+  changed_when: false
+
+
+- name: Generate SSH key for Jenkins
+  command: >
+    kubectl exec -n jenkins jenkins-0 --
+    ssh-keygen -t ed25519 -f /var/jenkins_home/.ssh/id_ed25519 -N ""
+  delegate_to: control-plane
+
+- name: Get Jenkins public key
+  command: >
+    kubectl exec -n jenkins jenkins-0 --
+    cat /var/jenkins_home/.ssh/id_ed25519.pub
+  register: jenkins_pubkey
+  delegate_to: control-plane
+
+# pour le deployment
+- name: Add Jenkins key to vm-service authorized_keys
+  authorized_key:
+    user: vagrant
+    key: "{{ jenkins_pubkey.stdout }}"
+  delegate_to: vm-service
+
+- name: Add Jenkins key to control-plane authorized_keys
+  authorized_key:
+    user: vagrant
+    key: "{{ jenkins_pubkey.stdout }}"
+  delegate_to: control-plane

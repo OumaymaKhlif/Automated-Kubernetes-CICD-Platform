@@ -1,0 +1,49 @@
+---
+# ─────────────────────────────────────────
+# 1. INSTALLATION NFS SERVER
+# ─────────────────────────────────────────
+
+- name: Install NFS server 
+  ansible.builtin.apt:
+    name:
+      - nfs-kernel-server	# serveur NFS qui partage les dossiers
+      - nfs-common	          # outils pour accéder à un serveur NFS
+    state: present
+    update_cache: true
+  become: yes
+
+- name: Créer le dossier NFS
+# Dossier accessiblepar tous les pods kubernetes	
+  ansible.builtin.file:
+    path: "{{ nfs_export_path }}"
+    state: directory
+    owner: nobody	# Propriétaire par défaut sécurisé 
+    group: nogroup	
+    mode: '0777'       # Permissions (lecture/écriture pour tous) 
+  become: yes
+
+- name: Configurer les exports NFS
+  ansible.builtin.copy:
+    dest: /etc/exports
+    content: |
+      {{ nfs_export_path }} {{ nfs_clients_cidr }}(rw,sync,no_subtree_check,no_root_squash)
+    mode: '0644'
+  become: yes
+  notify: export nfs
+# Définir le dossier NFS partagé, les clients autorisés (réseau) et les permissions d’accès
+# rw : Lecture et ecriture
+# sync : écriture sécurisée et immédiate sur le disque avant de répondre au client
+
+- name: Démarrer NFS server
+  ansible.builtin.service:
+    name: nfs-kernel-server
+    enabled: yes
+    state: started
+  become: yes
+
+
+# Force l'application des exports
+- name: Appliquer les exports NFS
+  ansible.builtin.command: exportfs -ra
+  become: yes
+  changed_when: false

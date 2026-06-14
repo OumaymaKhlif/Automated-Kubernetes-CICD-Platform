@@ -1,0 +1,6 @@
+# IP du serveur NFS = vm-service
+nfs_server_ip: "192.168.56.10"
+# Dossier exporté par vm-service
+nfs_export_path: "/srv/nfs/k8s"
+# Point de montage local sur chaque worker : Dossier local sur une machine qui sert à :accéder à un dossier distant via NFS et lire/écrire comme si c’était loca
+nfs_mount_point: "/mnt/nfs"

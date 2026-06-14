@@ -1,0 +1,31 @@
+---
+# ─────────────────────────────────────────
+# 1. Rejoindre le cluster
+# ─────────────────────────────────────────
+# On vérifie d'abord si le worker est déjà dans le cluster
+- name: Vérifier si le worker est déjà dans le cluster
+  ansible.builtin.stat:
+    path: /etc/kubernetes/kubelet.conf
+  register: worker_joined
+  become: yes
+# Kubelet.conf contient la configuration de kubelet, l'identité du noeud et les accés API Server 
+
+- name: Récupérer la commande join depuis control-plane
+  ansible.builtin.slurp:
+    src: /tmp/kubeadm_join_command
+  delegate_to: control-plane
+  register: join_file
+  become: yes
+# slurp = lit le fichier sur control-plane et le transforme en base64
+# delegate_to = va chercher sur control-plane, pas sur le worker
+
+# Exécute la commande join pour connecter le worker au cluster
+- name: Rejoindre le cluster Kubernetes
+  ansible.builtin.command: "{{ join_file.content | b64decode | trim }}"
+  when: not worker_joined.stat.exists
+
+
+- name: Appliquer nfs-client
+  import_role:
+    name: nfs-client
+

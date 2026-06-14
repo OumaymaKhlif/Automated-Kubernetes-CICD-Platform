@@ -1,0 +1,34 @@
+---
+# ─────────────────────────────────────────
+# 1. DÉPLOYER NEXUS
+# ─────────────────────────────────────────
+
+- name: Créer le dossier de données Nexus   
+  ansible.builtin.file:
+    path: "{{ nexus_data_dir }}"         
+    state: directory                     
+    mode: '0777'                         # permissions complètes (lecture/écriture)
+    owner: 200
+    group: 200
+  become: yes
+# Nexus tourne avec un utilisateur interne (UID/GID 200) 
+
+
+# Installer dépendance Python Docker (OBLIGATOIRE)
+- name: Installer Docker SDK pour Python
+  ansible.builtin.pip:
+    name: docker
+    executable: pip3
+
+- name: Lancer le container Nexus         
+  ansible.builtin.docker_container:
+    name: nexus                         
+    image: sonatype/nexus3:latest       # image officielle Nexus
+    state: started                      	     # container démarré
+    restart_policy: always             	     # Redémarrer automatiquement
+    ports:
+      - "8081:8081/tcp"
+      - "8082:8082/tcp"    
+    volumes:
+      - "{{ nexus_data_dir }}:/nexus-data"  # stockage persistant
+  become: yes

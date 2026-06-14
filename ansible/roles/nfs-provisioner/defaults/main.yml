@@ -1,0 +1,11 @@
+# IP du serveur NFS (machine qui expose le stockage)
+nfs_server_ip: "192.168.56.10"
+
+# Chemin exporté par le serveur NFS (dossier partagé)
+nfs_export_path: "/srv/nfs/k8s"
+# StorageClass = configuration qui permet la création automatique des PV. 
+
+# Nom de la StorageClass Kubernetes créée automatiquement
+# Elle sera utilisée par les PVC pour demander du stockage
+
+storage_class_name: "nfs-client"

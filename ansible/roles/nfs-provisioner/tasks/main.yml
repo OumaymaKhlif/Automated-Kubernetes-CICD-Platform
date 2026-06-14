@@ -1,0 +1,73 @@
+---
+# ─────────────────────────────────────────────
+# 1. Ajouter le repository Helm du provisioner
+# ─────────────────────────────────────────────
+
+# Helm = outil qui installe des applications Kubernetes via des “charts” (paquets prêts à l’emploi).
+- name: Ajouter le repo Helm NFS provisioner
+  ansible.builtin.command: >
+    helm repo add nfs-subdir-external-provisioner
+    https://kubernetes-sigs.github.io/nfs-subdir-external-provisioner/
+  # exécute en tant qu'utilisateur vagrant (qui a kubectl/helm configuré)
+  environment:
+    KUBECONFIG: /home/vagrant/.kube/config
+    # permet à Helm d'accéder au cluster Kubernetes
+  # exécute la commande Helm pour ajouter le repo officiel
+  become_user: vagrant
+  become: yes
+
+# ─────────────────────────────────────────────
+# 2. Mise à jour des repositories Helm
+# ─────────────────────────────────────────────
+
+- name: Mettre à jour les repos Helm
+  ansible.builtin.command: helm repo update
+  # récupère les dernières versions des charts Helm
+  environment:
+    KUBECONFIG: /home/vagrant/.kube/config
+  become_user: vagrant
+  become: yes
+
+# ─────────────────────────────────────────────
+# 3. Installation du NFS provisioner
+# ─────────────────────────────────────────────
+
+- name: Installer NFS provisioner
+  ansible.builtin.command: >
+    helm upgrade --install nfs-provisioner
+    nfs-subdir-external-provisioner/nfs-subdir-external-provisioner
+    --namespace nfs-provisioner
+    --create-namespace  
+    --set nfs.server={{ nfs_server_ip }}
+    --set nfs.path={{ nfs_export_path }}
+    --set storageClass.name={{ storage_class_name }}
+    --set storageClass.reclaimPolicy=Retain
+    --set storageClass.defaultClass=true
+  environment:
+    KUBECONFIG: /home/vagrant/.kube/config
+  become_user: vagrant
+  become: yes
+  
+# StorageClass permet de définir et de provisionner automatiquement des volumes de stockage à la demande
+# --set storageClass.reclaimPolicy=Retain : conserve les données même si PVC supprimé
+# --set storageClass.defaultClass=true : rend cette StorageClass par défaut pour les PVC sans StorageClass spécifiée
+
+# ─────────────────────────────────────────────
+# 4. Vérification de la StorageClass
+# ─────────────────────────────────────────────
+
+- name: Vérifier la StorageClass
+  ansible.builtin.command: kubectl get storageclass
+  # affiche toutes les StorageClass disponibles
+  environment:
+    KUBECONFIG: /home/vagrant/.kube/config
+  register: sc_output
+  become_user: vagrant
+  become: yes
+  # stocke le résultat dans une variable Ansible
+ 
+
+- name: Afficher la StorageClass
+  ansible.builtin.debug:
+    msg: "{{ sc_output.stdout }}"
+    # affiche le résultat à l’écran

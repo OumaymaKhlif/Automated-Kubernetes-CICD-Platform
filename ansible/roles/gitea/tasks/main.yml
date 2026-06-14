@@ -1,0 +1,31 @@
+---
+# ─────────────────────────────────────────
+# 1. DÉPLOYER GITEA
+# ─────────────────────────────────────────
+
+- name: Créer le dossier de données Gitea  
+  ansible.builtin.file:
+    path: "{{ gitea_data_dir }}"           
+    state: directory                      
+    mode: '0777'                         # accès total (lecture/écriture)
+  become: yes
+
+- name: Lancer le container Gitea 
+  ansible.builtin.docker_container:
+    name: gitea                        
+    image: gitea/gitea:latest           
+    state: started                      
+    restart_policy: always             
+    ports:
+      - "{{ gitea_port }}:3000"        # interface web Gitea
+      - "2222:22"                           # SSH pour git clone/push
+    volumes:
+      - "{{ gitea_data_dir }}:/data"   # stockage persistant des dépôts
+    env:
+      GITEA__database__DB_TYPE: "{{ gitea_db_type }}"
+      GITEA__server__ROOT_URL: "{{ gitea_root_url }}"
+      GITEA__server__SSH_PORT: "{{ gitea_ssh_port }}"
+      GITEA__webhook__ALLOWED_HOST_LIST: "*"
+  become: yes
+
+

@@ -1,0 +1,5 @@
+# Chemin du dossier partagé par le serveur NFS 
+nfs_export_path: "/srv/nfs/k8s"
+
+# Réseau des clients autorisés à accéder au partage NFS 
+nfs_clients_cidr: "192.168.56.0/24"

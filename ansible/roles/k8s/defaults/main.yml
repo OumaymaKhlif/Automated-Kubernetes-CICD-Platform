@@ -1,0 +1,3 @@
+# Version Kubernetes à installer
+k8s_version: "1.29"
+kubernetes_apt_version: "1.29.0-1.1"

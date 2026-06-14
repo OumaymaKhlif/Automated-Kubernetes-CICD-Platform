@@ -1,0 +1,35 @@
+# ─────────────────────────────────────────
+# 1. Vérifier si Helm est déjà installé
+# ─────────────────────────────────────────
+- name: Vérifier si Helm est déjà installé
+  ansible.builtin.stat:
+    path: /usr/local/bin/helm
+  register: helm_binary
+
+# ─────────────────────────────────────────
+# 2. Télécharger et installer Helm (script officiel)
+# ─────────────────────────────────────────
+- name: Télécharger et installer Helm (script officiel)
+  ansible.builtin.shell: |
+    curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+  args:
+    executable: /bin/bash
+  when: not helm_binary.stat.exists
+  become: yes
+
+# Helm = gestionnaire de packages Kubernetes
+
+# ─────────────────────────────────────────
+# 3. Vérifier l'installation de Helm
+# ─────────────────────────────────────────
+- name: Vérifier installation Helm
+  ansible.builtin.command: helm version --short
+  register: helm_version
+  changed_when: false
+
+# ─────────────────────────────────────────
+# 4. Afficher la version installée de Helm
+# ─────────────────────────────────────────
+- name: Afficher version Helm installée
+  ansible.builtin.debug:
+    msg: "Helm installé : {{ helm_version.stdout }}"

@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>DevOps CRUD</title>
+</head>
+<body>
+
+<h1>Users List</h1>
+
+<input type="text" id="name" placeholder="name">
+<button onclick="addUser()">Add</button>
+
+<ul id="users"></ul>
+
+<script>
+const API = 'http://192.168.56.11:30091';
+
+async function loadUsers() {
+    const res = await fetch(API + '/users');
+    const users = await res.json();
+
+    document.getElementById('users').innerHTML =
+        users.map(u =>
+            `<li>${u.name}
+            <button onclick="deleteUser('${u._id}')">X</button>
+            </li>`
+        ).join('');
+}
+
+async function addUser() {
+    const name = document.getElementById('name').value;
+
+    await fetch(API + '/users', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ name })
+    });
+
+    loadUsers();
+}
+
+async function deleteUser(id) {
+    await fetch(API + '/users/' + id, {
+        method: 'DELETE'
+    });
+
+    loadUsers();
+}
+
+loadUsers();
+</script>
+
+</body>
+</html>
