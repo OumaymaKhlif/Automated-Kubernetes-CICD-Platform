@@ -1,6 +1,6 @@
 # 🚀 Kubernetes DevOps Platform — Fully Automated CI/CD Infrastructure
 
-## 📌 Project Overview
+## Project Overview
 
 This project demonstrates the implementation of a complete **DevOps and Cloud-Native platform** using **Infrastructure as Code (IaC)** principles.
 
@@ -16,7 +16,7 @@ The entire environment is provisioned automatically using **Vagrant** and **Ansi
 
 ---
 
-# 🎯 Objectives
+# Objectives
 
 The main goals of this project are:
 
@@ -30,7 +30,7 @@ The main goals of this project are:
 
 ---
 
-# 🏗 Infrastructure Architecture
+# Infrastructure Architecture
 
 ## Virtual Machines
 
@@ -72,7 +72,7 @@ The main goals of this project are:
 
 ---
 
-# ☸ Kubernetes Cluster
+# Kubernetes Cluster
 
 The Kubernetes cluster is composed of:
 
@@ -89,7 +89,7 @@ The Kubernetes cluster is composed of:
 
 ---
 
-# 🔄 CI/CD Pipeline Workflow
+# CI/CD Pipeline Workflow
 
 ```text
 Developer Pushes Code to Gitea
@@ -107,7 +107,7 @@ Automatic Deployment on Kubernetes
 
 ---
 
-# 🚀 3-Tier Application
+# 3-Tier Application
 
 The deployed application includes:
 
@@ -128,7 +128,7 @@ The deployed application includes:
 
 ---
 
-# 📦 Services Running on vm-service
+# Services Running on vm-service
 
 | Service          | Purpose                   |
 | ---------------- | ------------------------- |
@@ -139,7 +139,7 @@ The deployed application includes:
 
 ---
 
-# 📁 Project Structure
+# Project Structure
 
 ```text
 .
@@ -159,7 +159,7 @@ The deployed application includes:
 
 ---
 
-# ⚙ Infrastructure Automation
+# Infrastructure Automation
 
 This project follows Infrastructure as Code principles:
 
@@ -182,20 +182,6 @@ This project follows Infrastructure as Code principles:
 ✅ Helm-based deployments
 ✅ Stateful application deployment
 ✅ Scalable cloud-native architecture
-
----
-
-# 📸 Screenshots
-
-You can add screenshots here:
-
-* Kubernetes nodes
-* Jenkins pipeline
-* Nexus repositories
-* Gitea repositories
-* Running application
-* Kubernetes dashboard
-* Helm releases
 
 ---
 
