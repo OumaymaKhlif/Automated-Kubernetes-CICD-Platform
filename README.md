@@ -43,7 +43,7 @@ The main goals of this project are:
 
 ---
 
-# 🛠 Technology Stack
+# Technology Stack
 
 ## Infrastructure & Automation
 
