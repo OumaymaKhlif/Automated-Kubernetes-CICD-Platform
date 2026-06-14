@@ -171,21 +171,29 @@ This project follows Infrastructure as Code principles:
 
 ---
 
-# 🔥 Key Features
+# Key Features
 
 ✅ Fully automated infrastructure
+
 ✅ Kubernetes multi-node cluster
+
 ✅ Jenkins CI/CD pipeline
+
 ✅ Private Docker registry with Nexus
+
 ✅ Git self-hosting with Gitea
+
 ✅ Persistent storage using NFS
+
 ✅ Helm-based deployments
+
 ✅ Stateful application deployment
+
 ✅ Scalable cloud-native architecture
 
 ---
 
-# 🧠 Skills Demonstrated
+# Skills Demonstrated
 
 * Kubernetes Administration
 * Docker & Containerization
@@ -200,7 +208,7 @@ This project follows Infrastructure as Code principles:
 
 ---
 
-# 🚀 Future Improvements
+# Future Improvements
 
 * Monitoring with Prometheus & Grafana
 * Logging with ELK Stack
