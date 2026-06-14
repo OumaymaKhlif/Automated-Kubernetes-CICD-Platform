@@ -1,0 +1,122 @@
+
+# ==============================================================
+# Réseau : private_network 192.168.56.x (les VM se voient entre elles)
+# ==============================================================
+
+Vagrant.configure("2") do |config|
+
+  # ------------------------------------------------------------
+  # IMAGE DE BASE
+  # bento/ubuntu-22.04 = Ubuntu 22.04 LTS optimisé, légere et rapide pour Vagrant
+  # ------------------------------------------------------------
+  config.vm.box = "bento/ubuntu-22.04"
+
+  # Désactive la vérification de mise à jour de la box au démarrage
+  # Évite les délais inutiles à chaque vagrant up
+  config.vm.box_check_update = false
+
+  # Désactive le dossier partagé par défaut entre ton PC et les VM
+  # On n'en a pas besoin, ça évite des erreurs si VirtualBox Guest Additions manque
+  config.vm.synced_folder ".", "/vagrant", disabled: true
+
+  # ==============================================================
+  # DÉFINITION DES VM
+  # On utilise un tableau pour éviter la répétition de code
+  # Chaque entrée : [nom_vm, ip, ram_en_mb, cpu]
+  # ==============================================================
+  vms = [
+    # VM Service : hors cluster, contient Nexus + NFS + Gitea + Docker + Ansible
+    { name: "vm-service",     ip: "192.168.56.10", ram: 3072, cpu: 2 },
+
+    # Control Plane : cerveau du cluster Kubernetes (Master)
+    { name: "control-plane",  ip: "192.168.56.11", ram: 3072, cpu: 2 },
+
+    # Worker 1 : nœud de calcul du cluster (exécute les pods)
+    { name: "worker-1",       ip: "192.168.56.12", ram: 2048, cpu: 2 },
+
+    # Worker 2 : nœud de calcul du cluster (exécute les pods)
+    { name: "worker-2",       ip: "192.168.56.13", ram: 2048, cpu: 2 },
+  ]
+
+  # ==============================================================
+  # BOUCLE : crée chaque VM avec sa configuration
+  # ==============================================================
+  vms.each do |vm|
+    config.vm.define vm[:name] do |node|
+
+      # Nom de la machine visible dans VirtualBox
+      node.vm.hostname = vm[:name]
+
+      # Réseau privé : IP fixe, visible uniquement entre les VM et ton PC
+      # type: "static" = IP fixe (ne change pas au redémarrage)
+      node.vm.network "private_network", ip: vm[:ip], type: "static"
+
+      # ------------------------------------------------------------
+      # CONFIGURATION VIRTUALBOX
+      # ------------------------------------------------------------
+      node.vm.provider "virtualbox" do |vb|
+
+        # Nom affiché dans l'interface graphique VirtualBox
+        vb.name = vm[:name]
+
+        # RAM allouée à la VM (en mégaoctets)
+        vb.memory = vm[:ram]
+
+        # Nombre de CPU alloués à la VM
+        vb.cpus = vm[:cpu]
+
+        # Désactive l'interface graphique VirtualBox (mode headless)
+        # Les VM tournent en arrière-plan sans fenêtre
+        vb.gui = false
+
+        # Optimisation réseau : désactive les fonctionnalités non nécessaires
+        # Permet à la VM d’utiliser le DNS de ta machine hôte pour résoudre les noms de domaine
+        vb.customize ["modifyvm", :id, "--natdnshostresolver1", "on"]
+        # Change le type de carte réseau en VirtIO plus performant (au lieu de Intel PRO/1000)
+        vb.customize ["modifyvm", :id, "--nictype1", "virtio"]
+        # active le mode promiscuité sur la 2ème carte réseau (la private_network) ce qui permet à la carte de recevoir tout le trafic réseau, pas seulement celui destiné à son IP.
+        # Utile pour que les VM puissent communiquer entre elles et avec le PC hôte sans restrictions.
+        vb.customize ["modifyvm", :id, "--nicpromisc2", "allow-all"]
+      end
+
+      # ------------------------------------------------------------
+      # PROVISIONING SHELL MINIMAL (toujours actif dès le début)
+      # But : préparer la VM pour qu'Ansible puisse s'y connecter
+      # ------------------------------------------------------------
+      node.vm.provision "shell", inline: <<-SHELL
+        # Met à jour la liste des paquets sans installer de mise à jour
+        # Nécessaire pour que apt trouve les paquets demandés ensuite
+        apt-get update -qq
+
+        # Installe Python3 (requis par Ansible pour fonctionner)
+        # -qq = mode silencieux (moins de logs)
+        apt-get install -y -qq python3
+
+        # Affiche un message de confirmation
+        echo "✅ $(hostname) prête — Python3 installé"
+      SHELL
+
+      # ------------------------------------------------------------
+      # PROVISIONING ANSIBLE (commenté — à activer quand Ansible est prêt)
+      # QUAND ACTIVER : après avoir créé les playbooks Ansible sur vm-service
+      # COMMENT ACTIVER : supprimer les # devant les lignes ci-dessous
+      #
+      # node.vm.provision "ansible" do |ansible|
+      #   # Chemin vers le playbook principal (depuis le dossier du Vagrantfile)
+      #   ansible.playbook = "ansible/site.yml"
+      #
+      #   # Fichier d'inventaire Ansible (liste des VM et leurs groupes)
+      #   ansible.inventory_path = "ansible/inventory/hosts.ini"
+      #
+      #   # Désactive la vérification de clé SSH (réseau privé local = ok)
+      #   ansible.host_key_checking = false
+      #
+      #   # Mode verbose pour voir ce qu'Ansible fait (utile pour debug)
+      #   # ansible.verbose = "v"
+      # end
+      # ------------------------------------------------------------
+
+    end
+  end
+
+end
